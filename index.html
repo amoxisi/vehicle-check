@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>车辆登记核验</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F5A623'/%3E%3Cg fill='%2323272E'%3E%3Crect x='6' y='6' width='9' height='9'/%3E%3Crect x='19' y='6' width='7' height='7'/%3E%3Crect x='6' y='19' width='7' height='7'/%3E%3Crect x='17' y='17' width='4' height='4'/%3E%3Crect x='23' y='23' width='3' height='3'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root{
+  --ink:#23272E; --paper:#F3F4F6; --card:#FFFFFF;
+  --green:#1F9D55; --green-bg:#E9F7EF;
+  --red:#D64545; --red-bg:#FDEBEB;
+  --yellow:#F5A623; --yellow-d:#E09100; --yellow-bg:#FEF6E6;
+  --muted:#7A818B; --line:#E7EAEE;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--ink);font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;line-height:1.55;font-size:15px;min-height:100vh;display:flex;flex-direction:column}
+.hazard{height:9px;background:repeating-linear-gradient(-45deg,#F5A623 0 14px,#23272E 14px 28px)}
+.top{color:#fff;padding:20px 20px 16px;text-align:center}
+.top h1{font-size:18px;font-weight:700;letter-spacing:.5px}
+.top p{color:#C9CDD4;font-size:12px;margin-top:4px}
+main{flex:1;width:100%;max-width:520px;margin:0 auto;padding:18px 16px 30px}
+.card{background:var(--card);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.35);overflow:hidden}
+/* 加载中 */
+.loading{text-align:center;padding:64px 20px;color:var(--muted)}
+.spinner{width:38px;height:38px;border:4px solid #E4E7EB;border-top-color:var(--yellow);border-radius:50%;margin:0 auto 14px;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* 结果 */
+.result{padding:0}
+.banner{padding:22px 20px 18px;text-align:center}
+.banner .icon{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.banner h2{font-size:22px;letter-spacing:.5px}
+.banner .sub{font-size:14px;margin-top:4px;opacity:.85}
+.plate{font-size:30px;font-weight:800;letter-spacing:2px;text-align:center;padding:14px 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-family:"Consolas","Microsoft YaHei",monospace}
+.fields{padding:16px 20px 20px}
+.f-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.f-row:last-child{border-bottom:none}
+.f-row .k{color:var(--muted);flex:none}
+.f-row .v{text-align:right;word-break:break-all;font-weight:600}
+.b-green .banner{background:var(--green-bg);color:var(--green)}
+.b-green .banner .icon{background:var(--green);color:#fff}
+.b-red .banner{background:var(--red-bg);color:var(--red)}
+.b-red .banner .icon{background:var(--red);color:#fff}
+.b-yellow .banner{background:var(--yellow-bg);color:var(--yellow-d)}
+.b-yellow .banner .icon{background:var(--yellow);color:#fff}
+.b-gray .banner{background:#F0F2F5;color:var(--ink-2,#3A4049)}
+.b-gray .banner .icon{background:#C9CDD4;color:#fff}
+.help{background:var(--card);border-radius:14px;padding:26px 20px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.help .h-icon{width:64px;height:64px;border-radius:14px;background:var(--yellow-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.help h2{font-size:18px;margin-bottom:8px}
+.help p{font-size:14px;color:var(--muted);line-height:1.7}
+.footer{color:#8B919B;font-size:12px;text-align:center;padding:14px 20px 22px}
+.footer b{color:#C9CDD4}
+svg{display:block}
+</style>
+</head>
+<body>
+<div class="hazard" aria-hidden="true"></div>
+<div class="top">
+  <h1 id="title">车辆登记核验</h1>
+  <p id="subtitle">扫描车辆二维码 · 自动核验是否在项目部登记库</p>
+</div>
+<main>
+  <div id="loading" class="card" hidden>
+    <div class="loading"><div class="spinner"></div>正在核验，请稍候…</div>
+  </div>
+  <div id="result"></div>
+</main>
+<div class="footer" id="footer">数据来源：<b id="footProj">项目部车辆登记库</b></div>
+<script>
+'use strict';
+/* ===== 解码（算法须与 admin.html 完全一致） ===== */
+function decodePhone(hex){
+  if(!hex) return '';
+  let out='';
+  for(let i=0;i+1<hex.length;i+=2){
+    out += String.fromCharCode(parseInt(hex.substr(i,2),16) ^ 0x5A);
+  }
+  return out;
+}
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ===== 渲染 ===== */
+function iconOk(){ return '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'; }
+function iconNo(){ return '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'; }
+function iconWarn(){ return '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>'; }
+function iconScan(){ return '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3D6B99" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg>'; }
+function iconErr(){ return '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>'; }
+
+function fieldsHtml(v){
+  let h = '';
+  const rows = [
+    ['车型', v.t], ['所属单位', v.u], ['驾驶员', v.d], ['联系电话', decodePhone(v.ph)], ['登记日期', v.r]
+  ];
+  rows.forEach(r=>{
+    if(r[1]) h += '<div class="f-row"><span class="k">'+r[0]+'</span><span class="v">'+esc(r[1])+'</span></div>';
+  });
+  return h;
+}
+function renderResult(v, kind){
+  const map = {
+    ok:   {cls:'b-green', icon:iconOk(),  title:'已登记', sub:'该车辆在项目部登记数据库内，可正常进出'},
+    off:  {cls:'b-yellow',icon:iconWarn(),title:'已停用', sub:'该车辆已登记，但当前状态为停用/注销'},
+    miss: {cls:'b-red',  icon:iconNo(),   title:'未登记', sub:'该车辆不在项目部登记数据库中，请联系项目部核验'},
+    err:  {cls:'b-gray', icon:iconErr(),  title:'查询服务异常', sub:'无法读取登记数据，请稍后重试或联系项目部'}
+  };
+  const m = map[kind];
+  let html = '<div class="card result '+m.cls+'">'
+    + '<div class="banner"><div class="icon">'+m.icon+'</div><h2>'+m.title+'</h2><div class="sub">'+m.sub+'</div></div>';
+  if(v && (kind==='ok'||kind==='off')) html += '<div class="plate">'+esc(v.p)+'</div><div class="fields">'+fieldsHtml(v)+'</div>';
+  html += '</div>';
+  $('result').innerHTML = html;
+}
+const $ = id=>document.getElementById(id);
+
+/* ===== 主流程 ===== */
+const vid = new URLSearchParams(location.search).get('vid');
+const loadEl = $('loading');
+function done(){ loadEl.hidden = true; }
+if(!vid){
+  loadEl.hidden = true;
+  $('result').innerHTML = '<div class="help"><div class="h-icon">'+iconScan()+'</div><h2>请扫描车辆二维码</h2>'
+    + '<p>本页面用于核验车辆是否在项目部登记数据库中。<br>请使用手机相机或微信扫一扫，扫描车辆挡风玻璃 / 车门上的二维码标签。</p></div>';
+}else{
+  loadEl.hidden = false;
+  /* 发布版（doubao-html）数据内联在 INLINE_DATA 中；服务器版则 fetch 同目录 vehicles.json */
+  const loadData = (typeof INLINE_DATA !== 'undefined' && INLINE_DATA)
+    ? Promise.resolve(INLINE_DATA)
+    : fetch('vehicles' + '.json', {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  loadData
+    .then(data=>{
+      done();
+      if(data && data.p) $('title').textContent = data.p + ' · 车辆核验';
+      if(data && data.p) $('footProj').textContent = data.p;
+      if(data && data.u) $('subtitle').textContent = '项目部车辆登记核验';
+      const list = (data && data.v) || [];
+      const found = list.find(x=>x.v===vid);
+      if(found) renderResult(found, found.s==='d' ? 'off' : 'ok');
+      else renderResult(null, 'miss');
+    })
+    .catch(()=>{ done(); renderResult(null, 'err'); });
+}
+</script>
+</body>
+</html>
