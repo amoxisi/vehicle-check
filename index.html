@@ -126,7 +126,7 @@ if(!vid){
   /* 发布版（doubao-html）数据内联在 INLINE_DATA 中；服务器版则 fetch 同目录 vehicles.json */
   const loadData = (typeof INLINE_DATA !== 'undefined' && INLINE_DATA)
     ? Promise.resolve(INLINE_DATA)
-    : fetch('vehicles' + '.json', {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+    : fetch('vehicles' + '.json?t=' + Date.now(), {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
   loadData
     .then(data=>{
       done();
